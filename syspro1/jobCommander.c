@@ -28,8 +28,19 @@ int main(int argc, char* argv[]) {
             printf("Usage: issueJob <job>\n");
             return 1;
         }
+
+        // Construct the entire command string
+        char jobCommand[1024] = "";
+        for (int i = 2; i < argc; ++i) {
+            strcat(jobCommand, argv[i]);
+            strcat(jobCommand, " ");
+        }
+
+        // Trim any trailing whitespace
+        jobCommand[strcspn(jobCommand, "\n")] = 0;
+
         mode = 1;
-        job = argv[2];
+        job = strdup(jobCommand);
     } else if (strcmp(argv[1], "setConcurrency") == 0) {
         if (argc < 3) {
             printf("Usage: setConcurrency <N>\n");
@@ -52,8 +63,8 @@ int main(int argc, char* argv[]) {
         mode = 4;
         pollState = argv[2];
     } else if (strcmp(argv[1], "exit") == 0) {
-        printf("jobExecutorServer terminated.\n");
-        return 0;
+        mode = 5;
+        //printf("jobExecutorServer terminated.\n");
     } else {
         printf("Invalid command: %s\n", argv[1]);
         return 1;
@@ -76,7 +87,7 @@ int main(int argc, char* argv[]) {
         } else if (pid == 0) {
             execlp("./jobExecutorServer", "./jobExecutorServer", NULL);
         }else {
-            sleep(2); // wait for server to write to file
+            sleep(3); // wait for server to write to file
         }
     }
     
@@ -88,8 +99,10 @@ int main(int argc, char* argv[]) {
         perror("read");
         return 1;
     }
-    
+    printf("Txt: %s\n", buf);
     pid_t server_pid = atoi(buf);
+
+    kill(server_pid, SIGUSR1); // Send signal to server to wake up
     printf("Server PID: %d\n", server_pid);
     
     // Open the FIFO for writing
@@ -98,24 +111,40 @@ int main(int argc, char* argv[]) {
         perror("open FIFO");
         exit(EXIT_FAILURE);
     }
+    sleep(1);
 
     // Write the command to the FIFO based on the mode
+
     switch (mode) {
-        case 1:
-            write(fifo_fd, "issueJob", strlen("issueJob"));
-            write(fifo_fd, job, strlen(job)); // Write the job to FIFO
+        case 1: {
+            char buffer[512];
+            sprintf(buffer, "issueJob %s", job);
+            printf("Buffer: %s\n", buffer);
+            write(fifo_fd, buffer, strlen(buffer));
             break;
-        case 2:
-            write(fifo_fd, "setConcurrency", strlen("setConcurrency"));
-            write(fifo_fd, N, strlen(N)); // Write the concurrency to FIFO
+        }
+        case 2: {
+            char buffer[strlen("setConcurrency") + 16 + 1]; // Assuming N is an integer
+            sprintf(buffer, "setConcurrency %s", N);
+            write(fifo_fd, buffer, strlen(buffer));
             break;
-        case 3:
-            write(fifo_fd, "stop", strlen("stop"));
-            write(fifo_fd, jobID, strlen(jobID)); // Write the job ID to FIFO
+        }
+        case 3: {
+            char buffer[strlen("stop") + strlen(jobID) + 1];
+            sprintf(buffer, "stop %s", jobID);
+            write(fifo_fd, buffer, strlen(buffer));
             break;
-        case 4:
-            write(fifo_fd, "poll", strlen("poll"));
-            write(fifo_fd, pollState, strlen(pollState)); // Write the poll state to FIFO
+        }
+        case 4: {
+            char buffer[strlen("poll") + strlen(pollState) + 1];
+            sprintf(buffer, "poll %s", pollState);
+            write(fifo_fd, buffer, strlen(buffer));
+            break;
+        }
+        case 5:
+            printf("jobExecutorServer terminated.\n");
+            printf("Sending exit signal to server...\n");
+            write(fifo_fd, "exit", strlen("exit"));
             break;
         default:
             // Should not reach here
