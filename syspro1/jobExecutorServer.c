@@ -104,7 +104,6 @@ void handleIssueJob(char* job, Queue* q, char* triplet) {
 
         // Execute the job command with the arguments
         execvp(argv[0], argv);
-        // If execvp fails, handle it
         perror("execvp");
         exit(EXIT_FAILURE);
     }
@@ -178,6 +177,8 @@ int main() {
     sigaction(SIGUSR1, &signalAction, NULL);
 
     // Write the process ID to the file
+    kill(getppid(), SIGSTOP); // Send signal to parent to wake up
+    printf("Writing PID to file\n");
     int pid = getpid();
     int fd = open("jobExecutorServer.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd != -1) {
@@ -194,12 +195,12 @@ int main() {
         return 1;
     }
 
+    kill(getppid(), SIGCONT); // Send signal to parent to wake up
     // Create FIFO
     if (mkfifo(fifo, 0666) == -1) {
         perror("Error creating fifo");
         exit(1);
     }
-
 
     // Main loop to wait for signals
     while (1) {

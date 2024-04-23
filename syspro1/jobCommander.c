@@ -86,8 +86,8 @@ int main(int argc, char* argv[]) {
             exit(1);
         } else if (pid == 0) {
             execlp("./jobExecutorServer", "./jobExecutorServer", NULL);
-        }else {
-            sleep(3); // wait for server to write to file
+        }else{
+            pause();
         }
     }
     
@@ -111,7 +111,6 @@ int main(int argc, char* argv[]) {
         perror("open FIFO");
         exit(EXIT_FAILURE);
     }
-    sleep(1);
 
     // Write the command to the FIFO based on the mode
 
