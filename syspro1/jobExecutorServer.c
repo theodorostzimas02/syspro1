@@ -11,7 +11,9 @@
 #include <sys/wait.h>
 
 char* fifo = "myfifo";
+char* clientFifo = "clientFifo";
 int concurrency = 1;
+int activeProcesses = 0;
 
 
 
@@ -76,17 +78,7 @@ Process dequeue(Queue* q) {
     return p;
 }
 
-
-
-void handleIssueJob(char* job, Queue* q, char* triplet) {
-    Process* p;
-    p = (Process*)malloc(sizeof(Process));
-    p->JobID = (char*)malloc(sizeof(char) * 8);
-    sprintf(p->JobID, "job_%02d", q->JobNum);
-    p->Job = strdup(job); // Allocate memory and copy the job command
-    p->queuePosition = q->JobNum;
-    enqueue(q, p);
-    sprintf(triplet, "%s %s %d", p->JobID, job, p->queuePosition);
+void processExecute(Process* proc){
     pid_t pid = fork();
     if (pid == -1) {
         perror("fork");
@@ -95,7 +87,7 @@ void handleIssueJob(char* job, Queue* q, char* triplet) {
         // Split the job command into command and arguments
         char* argv[32]; // Assuming a maximum of 32 arguments
         int argc = 0;
-        char* token = strtok(job, " ");
+        char* token = strtok(proc->Job, " ");
         while (token != NULL) {
             argv[argc++] = token;
             token = strtok(NULL, " ");
@@ -106,9 +98,23 @@ void handleIssueJob(char* job, Queue* q, char* triplet) {
         execvp(argv[0], argv);
         perror("execvp");
         exit(EXIT_FAILURE);
+    }else {
+        activeProcesses++;
     }
 }
 
+
+
+void handleIssueJob(char* job, Queue* q, char* triplet) {
+    Process* p;
+    p = (Process*)malloc(sizeof(Process));
+    p->JobID = (char*)malloc(sizeof(char) * 8);
+    sprintf(p->JobID, "job_%02d", q->JobNum);
+    p->Job = strdup(job); // Allocate memory and copy the job command
+    p->queuePosition = q->JobNum;
+    enqueue(q, p);
+    sprintf(triplet, "<%s,%s,%d>", p->JobID, job, p->queuePosition);
+}
 
 void handleSetConcurrency(char* N) {
     int n = atoi(N);
@@ -121,7 +127,13 @@ void handleSetConcurrency(char* N) {
 }
 
 
-
+void handleSIGCHLD(int signum) {
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        activeProcesses--;
+    }
+}
 
 
 
@@ -152,10 +164,17 @@ void handleUSR1(int signum) {
     if (strncmp(buf, "issueJob", 8) == 0) {
         char triplet[1024];
         handleIssueJob(buf + 9, &ProcessQueue, triplet);
-        printf("Triplet: %s\n", triplet);
+        int fd1 = open(clientFifo, O_WRONLY);
+        if (fd1 == -1) {
+            perror("open");
+            exit(EXIT_FAILURE);
+        }
+        write(fd1, triplet, strlen(triplet));
+        close(fd1);
     } else if (strncmp(buf, "setConcurrency", 14) == 0) {
         handleSetConcurrency(buf + 15);
-    }else if (strncmp(buf, "stop", 4) == 0){\
+    }else if (strncmp(buf, "stop", 4) == 0){
+        
         int pid = atoi(buf + 5);
         kill(pid, SIGKILL);
     } else {
@@ -176,8 +195,14 @@ int main() {
     signalAction.sa_flags = SA_RESTART;
     sigaction(SIGUSR1, &signalAction, NULL);
 
+    struct sigaction sigchldAction;
+    sigchldAction.sa_handler = handleSIGCHLD;
+    sigemptyset(&sigchldAction.sa_mask);
+    sigchldAction.sa_flags = SA_RESTART;
+    sigaction(SIGCHLD, &sigchldAction, NULL);
+
+
     // Write the process ID to the file
-    kill(getppid(), SIGSTOP); // Send signal to parent to wake up
     printf("Writing PID to file\n");
     int pid = getpid();
     int fd = open("jobExecutorServer.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -195,17 +220,21 @@ int main() {
         return 1;
     }
 
-    kill(getppid(), SIGCONT); // Send signal to parent to wake up
+    
     // Create FIFO
     if (mkfifo(fifo, 0666) == -1) {
         perror("Error creating fifo");
         exit(1);
     }
+    kill(getppid(), SIGUSR1); // Send signal to parent to wake up
 
-    // Main loop to wait for signals
     while (1) {
-        printf("im here\n");
+        if (ProcessQueue.Head != NULL &&  activeProcesses < concurrency) {
+            Process p = dequeue(&ProcessQueue);
+            processExecute(&p);
+        }
         pause(); // Wait for signals
+        
     }
 
     return 0;

@@ -11,6 +11,11 @@
 #include <sys/wait.h>
 
 char *fifo = "myfifo";
+char *clientFifo = "clientFifo";
+
+void handleUSR1(int sig) {
+    //handles usr1 signal that controls the wait time 
+}
 
 int main(int argc, char* argv[]) {
     int mode = 0;
@@ -18,6 +23,12 @@ int main(int argc, char* argv[]) {
     char* N = "1"; // concurrency
     char* jobID;
     char* pollState; 
+
+    struct sigaction signalAction;
+    signalAction.sa_handler = handleUSR1;
+    sigemptyset(&signalAction.sa_mask);
+    signalAction.sa_flags = SA_RESTART;
+    sigaction(SIGUSR1, &signalAction, NULL);
 
     if (argc < 2) {
         printf("Usage: <command> [<job>/<N>]\n");
@@ -86,11 +97,12 @@ int main(int argc, char* argv[]) {
             exit(1);
         } else if (pid == 0) {
             execlp("./jobExecutorServer", "./jobExecutorServer", NULL);
-        }else{
+        } else{
             pause();
         }
     }
-    
+
+
     fd = open("jobExecutorServer.txt", O_RDONLY);
     char buf[1024];
     int bytesRead = read(fd, buf, sizeof(buf));
@@ -101,6 +113,13 @@ int main(int argc, char* argv[]) {
     }
     printf("Txt: %s\n", buf);
     pid_t server_pid = atoi(buf);
+
+    if (mkfifo(clientFifo, 0666) == -1) {
+        if (errno != EEXIST) {
+            perror("mkfifo");
+            exit(EXIT_FAILURE);
+        }
+    }
 
     kill(server_pid, SIGUSR1); // Send signal to server to wake up
     printf("Server PID: %d\n", server_pid);
@@ -120,6 +139,20 @@ int main(int argc, char* argv[]) {
             sprintf(buffer, "issueJob %s", job);
             printf("Buffer: %s\n", buffer);
             write(fifo_fd, buffer, strlen(buffer));
+            int fd1 = open(clientFifo, O_RDONLY);
+            printf("fd1: %d\n", fd1);
+            if (fd1 == -1) {
+                perror("open");
+                exit(EXIT_FAILURE);
+            }
+            char buf1[1024];
+            int bytesRead1 = read(fd1, buf1, sizeof(buf1));
+            if (bytesRead1 == -1) {
+                perror("read");
+                exit(EXIT_FAILURE);
+            }
+            printf("Received from buf1: %s\n", buf1);
+            close (fd1);
             break;
         }
         case 2: {
@@ -150,7 +183,9 @@ int main(int argc, char* argv[]) {
             break;
     }
 
+
     close(fifo_fd); // Close the FIFO
+    unlink(clientFifo); // Remove the FIFO
 
     return 0;
 }
