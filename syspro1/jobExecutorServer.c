@@ -22,6 +22,7 @@ typedef struct {
     char* JobID;
     char* Job;
     int queuePosition;
+    pid_t pid ;
 } Process;
 
 typedef struct QueueNode {
@@ -37,6 +38,7 @@ typedef struct {
 } Queue;
 
 Queue ProcessQueue;
+Queue RunningQueue;
 
 void enqueue(Queue* q, Process* p) {
     QueueNode* newNode = (QueueNode*)malloc(sizeof(QueueNode));
@@ -78,7 +80,19 @@ Process dequeue(Queue* q) {
     return p;
 }
 
+Process* search(Queue* q, char* jobID){
+    QueueNode* current = q->Head;
+    while (current != NULL){
+        printf("current->proc.JobID %s\n", current->proc.JobID);
+        if (strcmp(current->proc.JobID, jobID) == 0){
+            return &current->proc;
+        }
+        current = current->next;
+    }
+}
+
 void processExecute(Process* proc){
+    enqueue(&RunningQueue, proc);
     pid_t pid = fork();
     if (pid == -1) {
         perror("fork");
@@ -99,6 +113,7 @@ void processExecute(Process* proc){
         perror("execvp");
         exit(EXIT_FAILURE);
     }else {
+        proc->pid = pid;
         activeProcesses++;
     }
 }
@@ -175,9 +190,61 @@ void handleUSR1(int signum) {
         handleSetConcurrency(buf + 15);
     }else if (strncmp(buf, "stop", 4) == 0){
         
-        int pid = atoi(buf + 5);
-        kill(pid, SIGKILL);
-    } else {
+        Process* needed = NULL;
+        printf("something %s\n", buf + 5);
+        if ((needed = search(&ProcessQueue, buf + 5)) != NULL){
+            printf("we are in stop server\n");
+            dequeue(&ProcessQueue);
+            printf("Job %s has been stopped\n", needed->JobID);
+        }else if((needed = search(&RunningQueue, buf + 5)) != NULL){
+            kill(needed->pid, SIGKILL);
+            printf("Job %s has been terminated\n", needed->JobID);
+        }
+        
+        int fd1 = open(clientFifo, O_WRONLY);
+        if (fd1 == -1) {
+            perror("open");
+            exit(EXIT_FAILURE);
+        }
+        if (needed == NULL){
+            write(fd1, "Job not found", strlen("Job not found"));
+            close(fd1);
+        }else{
+            write(fd1, needed->JobID, strlen(needed->JobID));
+            close(fd1);
+        }
+        
+        close(fd1);
+
+    }else if(strncmp(buf, "poll", 4) == 0){
+        int fd1 = open(clientFifo, O_WRONLY);
+        if (fd1 == -1) {
+            perror("open");
+            exit(EXIT_FAILURE);
+        }
+        if (strcmp(buf + 5, "running") == 0){
+            QueueNode* current = RunningQueue.Head;
+            char triplet[1024];
+            while (current != NULL){
+                sprintf(triplet, "<%s,%s,%d>", current->proc.JobID, current->proc.Job, current->proc.queuePosition);
+                write(fd1, triplet, strlen(triplet));
+                current = current->next;
+            }
+        }else if (strcmp(buf + 5, "queued") == 0){
+            QueueNode* current = ProcessQueue.Head;
+            char triplet[1024];
+            while (current != NULL){
+                sprintf(triplet, "<%s,%s,%d>", current->proc.JobID, current->proc.Job, current->proc.queuePosition);
+                write(fd1, triplet, strlen(triplet));
+                current = current->next;
+            }
+        }else{
+            write(fd1, "Invalid command", strlen("Invalid command"));
+        }
+        close(fd1); 
+    
+    
+    }else {
         printf("Invalid command: %s\n", buf);
     }
 

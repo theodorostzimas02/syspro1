@@ -162,15 +162,44 @@ int main(int argc, char* argv[]) {
             break;
         }
         case 3: {
+            printf("we are here\n");
             char buffer[strlen("stop") + strlen(jobID) + 1];
             sprintf(buffer, "stop %s", jobID);
             write(fifo_fd, buffer, strlen(buffer));
+            int fd1 = open(clientFifo, O_RDONLY);
+            printf("fd1: %d\n", fd1);
+            if (fd1 == -1) {
+                perror("open");
+                exit(EXIT_FAILURE);
+            }
+            char buf1[1024];
+            int bytesRead1 = read(fd1, buf1, sizeof(buf1));
+            if (bytesRead1 == -1) {
+                perror("read");
+                exit(EXIT_FAILURE);
+            }
+            printf("Received from buf1: %s\n", buf1);
+            close (fd1);
             break;
         }
         case 4: {
             char buffer[strlen("poll") + strlen(pollState) + 1];
             sprintf(buffer, "poll %s", pollState);
             write(fifo_fd, buffer, strlen(buffer));
+            int fd1 = open(clientFifo, O_RDONLY);
+            printf("fd1: %d\n", fd1);
+            if (fd1 == -1) {
+                perror("open");
+                exit(EXIT_FAILURE);
+            }
+            char buf1[1024];
+            int bytesRead1 = read(fd1, buf1, sizeof(buf1));
+            if (bytesRead1 == -1) {
+                perror("read");
+                exit(EXIT_FAILURE);
+            }
+            printf("Received from buf1: %s\n", buf1);
+            close (fd1);
             break;
         }
         case 5:
