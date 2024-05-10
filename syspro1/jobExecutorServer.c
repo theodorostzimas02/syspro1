@@ -113,6 +113,7 @@ void processExecute(Process* proc){
         perror("execvp");
         exit(EXIT_FAILURE);
     }else {
+        //Arxikopoihsh tou pid se NULL wste ean den ektelestei h malakia tote den xreiazetai na kanei kill kati to opoio den yparxei 
         proc->pid = pid;
         activeProcesses++;
     }
