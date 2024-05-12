@@ -16,8 +16,6 @@ int concurrency = 1;
 int activeProcesses = 0;
 
 
-
-
 typedef struct {
     char* JobID;
     char* Job;
@@ -57,6 +55,8 @@ void enqueue(Queue* q, Process* p) {
     }
 
     q->JobNum++;
+    printf("Job is queued with pid %d\n", p->pid);
+    
 }
 
 Process dequeue(Queue* q) {
@@ -89,10 +89,23 @@ Process* search(Queue* q, char* jobID){
         }
         current = current->next;
     }
+    return NULL;
+}
+
+void freeQueue(Queue* q) {
+    QueueNode* current = q->Head;
+    while (current != NULL) {
+        QueueNode* temp = current;
+        current = current->next;
+        free(temp->proc.JobID);
+        free(temp);
+    }
+    q->Head = NULL;
+    q->Tail = NULL;
+    q->JobNum = 0;
 }
 
 void processExecute(Process* proc){
-    enqueue(&RunningQueue, proc);
     pid_t pid = fork();
     if (pid == -1) {
         perror("fork");
@@ -115,6 +128,7 @@ void processExecute(Process* proc){
     }else {
         //Arxikopoihsh tou pid se NULL wste ean den ektelestei h malakia tote den xreiazetai na kanei kill kati to opoio den yparxei 
         proc->pid = pid;
+        enqueue(&RunningQueue, proc);       
         activeProcesses++;
     }
 }
@@ -173,6 +187,8 @@ void handleUSR1(int signum) {
     printf("Received: %s\n", buf);
     if (strcmp(buf, "exit") == 0) {
         printf("Received termination signal. Exiting...\n");
+        freeQueue(&ProcessQueue);
+        freeQueue(&RunningQueue);
         unlink("jobExecutorServer.txt");
         unlink(fifo);
         exit(EXIT_SUCCESS);
@@ -198,6 +214,7 @@ void handleUSR1(int signum) {
             dequeue(&ProcessQueue);
             printf("Job %s has been stopped\n", needed->JobID);
         }else if((needed = search(&RunningQueue, buf + 5)) != NULL){
+            printf("we are in stop server with pid %d\n", needed->pid);
             kill(needed->pid, SIGKILL);
             printf("Job %s has been terminated\n", needed->JobID);
         }
