@@ -3,7 +3,7 @@
 CC = gcc
 
 # Compile Options
-CFLAGS = -Wall -Werror -std=c99 -D_POSIX_C_SOURCE=200809L
+CFLAGS = -g -Wall -Werror -std=c99 -D_POSIX_C_SOURCE=200809L
 ARGSV = issueJob ./processes/progDelay 5
 
 jobCommander: jobCommander.c

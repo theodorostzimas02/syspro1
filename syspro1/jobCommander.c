@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
     if (!txtExists) {
         pid_t pid = fork();
         if (pid == -1) {
-            printf("Error forking\n");
+            perror("fork");
             exit(1);
         } else if (pid == 0) {
             execlp("./jobExecutorServer", "./jobExecutorServer", NULL);
@@ -111,7 +111,7 @@ int main(int argc, char* argv[]) {
         perror("read");
         return 1;
     }
-    printf("Txt: %s\n", buf);
+    //printf("Txt: %s\n", buf);
     pid_t server_pid = atoi(buf);
 
     if (mkfifo(clientFifo, 0666) == -1) {
@@ -122,7 +122,7 @@ int main(int argc, char* argv[]) {
     }
 
     kill(server_pid, SIGUSR1); // Send signal to server to wake up
-    printf("Server PID: %d\n", server_pid);
+    //printf("Server PID: %d\n", server_pid);
     
     // Open the FIFO for writing
     int fifo_fd = open(fifo, O_WRONLY);
@@ -137,10 +137,10 @@ int main(int argc, char* argv[]) {
         case 1: {
             char buffer[512];
             sprintf(buffer, "issueJob %s", job);
-            printf("Buffer: %s\n", buffer);
+            //printf("Buffer: %s\n", buffer);
             write(fifo_fd, buffer, strlen(buffer));
             int fd1 = open(clientFifo, O_RDONLY);
-            printf("fd1: %d\n", fd1);
+            //printf("fd1: %d\n", fd1);
             if (fd1 == -1) {
                 perror("open");
                 exit(EXIT_FAILURE);
@@ -162,12 +162,11 @@ int main(int argc, char* argv[]) {
             break;
         }
         case 3: {
-            printf("we are here\n");
             char buffer[strlen("stop") + strlen(jobID) + 1];
             sprintf(buffer, "stop %s", jobID);
             write(fifo_fd, buffer, strlen(buffer));
             int fd1 = open(clientFifo, O_RDONLY);
-            printf("fd1: %d\n", fd1);
+            //printf("fd1: %d\n", fd1);
             if (fd1 == -1) {
                 perror("open");
                 exit(EXIT_FAILURE);
@@ -187,7 +186,7 @@ int main(int argc, char* argv[]) {
             sprintf(buffer, "poll %s", pollState);
             write(fifo_fd, buffer, strlen(buffer));
             int fd1 = open(clientFifo, O_RDONLY);
-            printf("fd1: %d\n", fd1);
+            //printf("fd1: %d\n", fd1);
             if (fd1 == -1) {
                 perror("open");
                 exit(EXIT_FAILURE);
@@ -198,7 +197,7 @@ int main(int argc, char* argv[]) {
                 perror("read");
                 exit(EXIT_FAILURE);
             }
-            printf("Received from buf1: %s\n", buf1);
+            printf("%s\n", buf1);
             close (fd1);
             break;
         }
