@@ -47,9 +47,6 @@ int main(int argc, char* argv[]) {
             strcat(jobCommand, " ");
         }
 
-        // Trim any trailing whitespace
-        //jobCommand[strcspn(jobCommand, "\n")] = 0;
-
         mode = 1;
         job = strdup(jobCommand);
     } else if (strcmp(argv[1], "setConcurrency") == 0) {
