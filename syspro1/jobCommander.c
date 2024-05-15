@@ -10,32 +10,32 @@
 #include <errno.h>
 #include <sys/wait.h>
 
-char *fifo = "myfifo";
-char *clientFifo = "clientFifo";
+char *fifo = "myfifo"; // FIFO File that the client writes to
+char *clientFifo = "clientFifo"; //FIFO FIle that the client reads from
 
-void handleUSR1(int sig) {
-    //handles usr1 signal that controls the wait time 
+void handleUSR1(int sig) {  
+    // Exists purely for the purpose of waking up the client when the server is created
 }
 
 int main(int argc, char* argv[]) {
-    int mode = 0;
-    char* job;
+    int mode = 0;   // 1: issueJob, 2: setConcurrency, 3: stop, 4: poll, 5: exit
+    char* job;      
     char* N = "1"; // concurrency
-    char* jobID;
-    char* pollState; 
+    char* jobID;    
+    char* pollState;    
 
-    struct sigaction signalAction;
-    signalAction.sa_handler = handleUSR1;
+    struct sigaction signalAction;              //code for handling signals lifted from Alex Delis' slides on K22
+    signalAction.sa_handler = handleUSR1;       
     sigemptyset(&signalAction.sa_mask);
     signalAction.sa_flags = SA_RESTART;
-    sigaction(SIGUSR1, &signalAction, NULL);
+    sigaction(SIGUSR1, &signalAction, NULL);        
 
     if (argc < 2) {
-        printf("Usage: <command> [<job>/<N>]\n");
+        printf("Usage: <command> [<job>/<N>]\n");           //error handling for invalid number of arguments
         return 1;
     }
-    if (strcmp(argv[1], "issueJob") == 0) {
-        if (argc < 3) {
+    if (strcmp(argv[1], "issueJob") == 0) {                 
+        if (argc < 3) {                                     
             printf("Usage: issueJob <job>\n");
             return 1;
         }
@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
         }
 
         // Trim any trailing whitespace
-        jobCommand[strcspn(jobCommand, "\n")] = 0;
+        //jobCommand[strcspn(jobCommand, "\n")] = 0;
 
         mode = 1;
         job = strdup(jobCommand);
@@ -75,21 +75,21 @@ int main(int argc, char* argv[]) {
         pollState = argv[2];
     } else if (strcmp(argv[1], "exit") == 0) {
         mode = 5;
-        //printf("jobExecutorServer terminated.\n");
     } else {
         printf("Invalid command: %s\n", argv[1]);
         return 1;
     }
 
-    int concurrency = atoi(N);
     bool txtExists = false;
-
+    
+    //if jobExecutorServer.txt exists, read the PID of the server
     int fd = open("jobExecutorServer.txt", O_RDONLY);
     if (fd != -1) {
         txtExists = true;
         close(fd);
     } 
 
+    //if jobExecutorServer.txt does not exist, create a new server
     if (!txtExists) {
         pid_t pid = fork();
         if (pid == -1) {
@@ -98,6 +98,7 @@ int main(int argc, char* argv[]) {
         } else if (pid == 0) {
             execlp("./jobExecutorServer", "./jobExecutorServer", NULL);
         } else{
+            //wait for usr1 signal to wake up the client
             pause();
         }
     }
@@ -111,9 +112,11 @@ int main(int argc, char* argv[]) {
         perror("read");
         return 1;
     }
-    //printf("Txt: %s\n", buf);
+
+    // Extract the PID of the server
     pid_t server_pid = atoi(buf);
 
+    // Create a FIFO for the client
     if (mkfifo(clientFifo, 0666) == -1) {
         if (errno != EEXIST) {
             perror("mkfifo");
@@ -122,8 +125,7 @@ int main(int argc, char* argv[]) {
     }
 
     kill(server_pid, SIGUSR1); // Send signal to server to wake up
-    //printf("Server PID: %d\n", server_pid);
-    
+
     // Open the FIFO for writing
     int fifo_fd = open(fifo, O_WRONLY);
     if (fifo_fd == -1) {
@@ -132,15 +134,12 @@ int main(int argc, char* argv[]) {
     }
 
     // Write the command to the FIFO based on the mode
-
     switch (mode) {
         case 1: {
             char buffer[512];
             sprintf(buffer, "issueJob %s", job);
-            //printf("Buffer: %s\n", buffer);
             write(fifo_fd, buffer, strlen(buffer));
             int fd1 = open(clientFifo, O_RDONLY);
-            //printf("fd1: %d\n", fd1);
             if (fd1 == -1) {
                 perror("open");
                 exit(EXIT_FAILURE);
@@ -151,8 +150,10 @@ int main(int argc, char* argv[]) {
                 perror("read");
                 exit(EXIT_FAILURE);
             }
-            printf("Received from buf1: %s\n", buf1);
+
+            printf("%s\n", buf1);
             close (fd1);
+            free(job);
             break;
         }
         case 2: {
@@ -166,7 +167,6 @@ int main(int argc, char* argv[]) {
             sprintf(buffer, "stop %s", jobID);
             write(fifo_fd, buffer, strlen(buffer));
             int fd1 = open(clientFifo, O_RDONLY);
-            //printf("fd1: %d\n", fd1);
             if (fd1 == -1) {
                 perror("open");
                 exit(EXIT_FAILURE);
@@ -177,7 +177,7 @@ int main(int argc, char* argv[]) {
                 perror("read");
                 exit(EXIT_FAILURE);
             }
-            printf("Received from buf1: %s\n", buf1);
+            printf("%s\n", buf1);
             close (fd1);
             break;
         }
@@ -186,7 +186,6 @@ int main(int argc, char* argv[]) {
             sprintf(buffer, "poll %s", pollState);
             write(fifo_fd, buffer, strlen(buffer));
             int fd1 = open(clientFifo, O_RDONLY);
-            //printf("fd1: %d\n", fd1);
             if (fd1 == -1) {
                 perror("open");
                 exit(EXIT_FAILURE);
@@ -202,16 +201,27 @@ int main(int argc, char* argv[]) {
             break;
         }
         case 5:
-            printf("jobExecutorServer terminated.\n");
-            printf("Sending exit signal to server...\n");
             write(fifo_fd, "exit", strlen("exit"));
+            int fd1 = open(clientFifo, O_RDONLY);
+            if (fd1 == -1) {
+                perror("open");
+                exit(EXIT_FAILURE);
+            }
+            char buf1[1024];
+            int bytesRead1 = read(fd1, buf1, sizeof(buf1));
+            if (bytesRead1 == -1) {
+                perror("read");
+                exit(EXIT_FAILURE);
+            }
+            printf("%s\n", buf1);
+            close (fd1);
             break;
         default:
             // Should not reach here
             break;
     }
 
-
+    
     close(fifo_fd); // Close the FIFO
     unlink(clientFifo); // Remove the FIFO
 

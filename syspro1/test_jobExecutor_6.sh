@@ -1,4 +1,4 @@
-killall progDelay
+killall ./progDelay
 ./jobCommander issueJob ./progDelay 1000
 ./jobCommander issueJob ./progDelay 1000
 ./jobCommander issueJob ./progDelay 1000

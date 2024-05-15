@@ -1,4 +1,3 @@
-
 # Compiler
 CC = gcc
 
@@ -6,19 +5,17 @@ CC = gcc
 CFLAGS = -g -Wall -Werror -std=c99 -D_POSIX_C_SOURCE=200809L
 ARGSV = issueJob ./processes/progDelay 5
 
-jobCommander: jobCommander.c
-	$(CC) $(FLAGS) $< -o $@
+# Compile rules
+jobCommander: jobCommander.c queue.c
+	$(CC) $(CFLAGS) $^ -o $@
 
-jobExecutorServer: jobExecutorServer.c
-	$(CC) $(FLAGS) $< -o $@
+jobExecutorServer: jobExecutorServer.c queue.c
+	$(CC) $(CFLAGS) $^ -o $@
 
-all: jobCommander jobExecutorServer
+progDelay: processes/progDelay.c
+	$(CC) $(CFLAGS) $^ -o $@
 
-run_cmp: jobCommander jobExecutorServer
-	./jobCommander $(ARGSV)
-
-valgrind_cmp: $(COMPARE)
-	valgrind --track-origins=yes --leak-check=full --show-leak-kinds=all -s ./$(COMPARE) $(ARGSV)
+all: jobCommander jobExecutorServer progDelay
 
 clean:
-	rm -rf jobCommander jobExecutorServer jobExecutorServer.txt myfifo clientFifo
+	rm -rf jobCommander jobExecutorServer jobExecutorServer.txt myfifo clientFifo progDelay
