@@ -2,8 +2,7 @@
 CC = gcc
 
 # Compile Options
-CFLAGS = -g -Wall -Werror -std=c99 -D_POSIX_C_SOURCE=200809L
-ARGSV = issueJob ./processes/progDelay 5
+CFLAGS = -g -Wall -Werror -std=c99 -D_POSIX_C_SOURCE=200809L 
 
 # Compile rules
 jobCommander: jobCommander.c queue.c
